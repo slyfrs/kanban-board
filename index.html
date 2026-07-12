@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title data-i18n="pageTitle">Kanban Board</title>
+    <script src="https://cdn.tailwindcss.com" onerror="window.__tailwindFailed=true;document.getElementById('offlineBanner')?.classList.remove('hidden')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js" onerror="window.__sortableFailed=true;document.getElementById('offlineBanner')?.classList.remove('hidden')"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700&display=swap" rel="stylesheet" onerror="this.onerror=null;this.href=''">
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-hover: #f9fafb;
+            --border: #e5e7eb;
+            --border-light: #f1f5f9;
+            --text-primary: #111827;
+            --text-secondary: #374151;
+            --text-muted: #6b7280;
+            --text-placeholder: #9ca3af;
+            --accent: #4f46e5;
+            --accent-hover: #4338ca;
+            --accent-text: #ffffff;
+            --danger: #ef4444;
+            --danger-bg: #fee2e2;
+            --warning: #f59e0b;
+            --warning-bg: #fef3c7;
+            --success: #10b981;
+            --success-bg: #dcfce7;
+            --shadow: 0 1px 2px rgba(0,0,0,0.05);
+            --modal-overlay: rgba(0,0,0,0.4);
+        }
+
+        .dark {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface-hover: #334155;
+            --border: #334155;
+            --border-light: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+            --text-placeholder: #64748b;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --accent-text: #ffffff;
+            --danger: #f87171;
+            --danger-bg: #7f1d1d;
+            --warning: #fbbf24;
+            --warning-bg: #78350f;
+            --success: #34d399;
+            --success-bg: #064e3b;
+            --shadow: 0 1px 2px rgba(0,0,0,0.3);
+            --modal-overlay: rgba(0,0,0,0.6);
+        }
+
+        * {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+        }
+        
+        body {
+            background: var(--bg);
+        }
+        
+        /* Кастомный скролл */
+        .task-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .task-list::-webkit-scrollbar-track {
+            background: var(--border);
+            border-radius: 10px;
+        }
+        .task-list::-webkit-scrollbar-thumb {
+            background: var(--text-muted);
+            border-radius: 10px;
+        }
+        
+        /* Анимации */
+        .kanban-card {
+            transition: all 0.2s ease;
+            cursor: grab;
+        }
+        .kanban-card:active {
+            cursor: grabbing;
+        }
+        .kanban-card.dragging {
+            opacity: 0.5;
+            transform: rotate(1deg);
+        }
+        
+        .column {
+            min-height: 500px;
+        }
+        
+        .task-list {
+            max-height: 65vh;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        
+        /* Бейджи */
+        .status-badge {
+            font-size: 0.7rem;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        /* Приоритеты */
+        .priority-high {
+            border-left: 3px solid var(--danger);
+            background: var(--surface);
+        }
+        .priority-medium {
+            border-left: 3px solid var(--warning);
+            background: var(--surface);
+        }
+        .priority-low {
+            border-left: 3px solid var(--success);
+            background: var(--surface);
+        }
+        
+        /* Дедлайны */
+        .deadline-urgent {
+            background: var(--warning-bg);
+            color: #d97706;
+        }
+        .deadline-expired {
+            background: var(--danger-bg);
+            color: #dc2626;
+            text-decoration: line-through;
+        }
+        
+        /* Теги с цветами */
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 10px;
+            border-radius: 16px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            transition: all 0.1s ease;
+        }
+        
+        /* Анимация модалок */
+        .modal-transition {
+            animation: fadeIn 0.2s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        /* Единый стиль карточек */
+        .kanban-card {
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+        
+        .kanban-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transform: translateY(-1px);
+        }
+        
+        /* Цветовая палитра для тегов (10 цветов) */
+        .tag-color-0 { background: #eef2ff; color: #4338ca; }
+        .tag-color-1 { background: #dcfce7; color: #166534; }
+        .tag-color-2 { background: #fee2e2; color: #b91c1c; }
+        .tag-color-3 { background: #fef3c7; color: #92400e; }
+        .tag-color-4 { background: #fce7f3; color: #be185d; }
+        .tag-color-5 { background: #e0e7ff; color: #3730a3; }
+        .tag-color-6 { background: #ccfbf1; color: #0f766e; }
+        .tag-color-7 { background: #fef9c3; color: #854d0e; }
+        .tag-color-8 { background: #ffe4e6; color: #9f1239; }
+        .tag-color-9 { background: #e6e6ff; color: #4c1d95; }
+
+        /* --- Резервные стили при отказе Tailwind CDN --- */
+        @supports not (animation: __tw_test) {
+            body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; margin: 0; padding: 16px; }
+            .hidden { display: none !important; }
+            .max-w-7xl { max-width: 1280px; margin: 0 auto; }
+            .flex { display: flex; }
+            .flex-1 { flex: 1 1 0%; }
+            .flex-wrap { flex-wrap: wrap; }
+            .items-center { align-items: center; }
+            .items-start { align-items: flex-start; }
+            .justify-between { justify-content: space-between; }
+            .gap-1 { gap: 4px; }
+            .gap-2 { gap: 8px; }
+            .gap-3 { gap: 12px; }
+            .gap-4 { gap: 16px; }
+            .mb-1 { margin-bottom: 4px; }
+            .mb-3 { margin-bottom: 12px; }
+            .mb-4 { margin-bottom: 16px; }
+            .mb-8 { margin-bottom: 32px; }
+            .mt-2 { margin-top: 8px; }
+            .p-3 { padding: 12px; }
+            .p-4 { padding: 16px; }
+            .px-4 { padding-left: 16px; padding-right: 16px; }
+            .py-3 { padding-top: 12px; padding-bottom: 12px; }
+            .text-sm { font-size: 0.875rem; }
+            .text-xs { font-size: 0.75rem; }
+            .font-medium { font-weight: 500; }
+            .font-bold { font-weight: 700; }
+            .rounded-xl { border-radius: 12px; }
+            .rounded-lg { border-radius: 8px; }
+            .bg-white { background: #fff; }
+            .bg-gray-50 { background: #f9fafb; }
+            .bg-indigo-600 { background: #4f46e5; }
+            .text-white { color: #fff; }
+            .text-gray-400 { color: #9ca3af; }
+            .text-gray-500 { color: #6b7280; }
+            .text-gray-600 { color: #4b5563; }
+            .text-gray-700 { color: #374151; }
+            .text-gray-800 { color: #1f2937; }
+            .text-gray-900 { color: #111827; }
+            .border { border: 1px solid #e5e7eb; }
+            .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+            .grid { display: grid; }
+            .grid-cols-1 { grid-template-columns: 1fr; }
+            .col-span-full { grid-column: 1 / -1; }
+            @media (min-width: 768px) {
+                .md\\:grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+                .md\\:p-6 { padding: 24px; }
+                body { padding: 24px; }
+            }
+            .break-words { word-break: break-word; }
+            .text-center { text-align: center; }
+        }
+
+        /* --- Переопределение Tailwind классов для тёмной темы --- */
+        .dark .bg-white { background: var(--surface) !important; }
+        .dark .bg-gray-50 { background: var(--surface-hover) !important; }
+        .dark .bg-gray-100 { background: var(--surface-hover) !important; }
+        .dark .text-gray-900 { color: var(--text-primary) !important; }
+        .dark .text-gray-800 { color: var(--text-primary) !important; }
+        .dark .text-gray-700 { color: var(--text-secondary) !important; }
+        .dark .text-gray-600 { color: var(--text-secondary) !important; }
+        .dark .text-gray-500 { color: var(--text-muted) !important; }
+        .dark .text-gray-400 { color: var(--text-placeholder) !important; }
+        .dark .border-gray-200 { border-color: var(--border) !important; }
+        .dark .border-gray-100 { border-color: var(--border-light) !important; }
+        .dark .border-gray-300 { border-color: var(--border) !important; }
+        .dark .bg-indigo-600 { background: var(--accent) !important; }
+        .dark .bg-indigo-50 { background: rgba(99,102,241,0.15) !important; }
+        .dark .bg-blue-50 { background: rgba(59,130,246,0.15) !important; }
+        .dark .bg-amber-50 { background: rgba(245,158,11,0.15) !important; }
+        .dark .bg-emerald-50 { background: rgba(16,185,129,0.15) !important; }
+        .dark .bg-red-50 { background: var(--danger-bg) !important; }
+        .dark .text-indigo-600 { color: var(--accent) !important; }
+        .dark .text-indigo-700 { color: var(--accent-hover) !important; }
+        .dark .shadow-sm { box-shadow: var(--shadow) !important; }
+        .dark .shadow-md { box-shadow: 0 4px 6px rgba(0,0,0,0.4) !important; }
+        .dark .shadow-xl { box-shadow: 0 10px 15px rgba(0,0,0,0.5) !important; }
+        .dark .bg-black\/40 { background: rgba(0,0,0,0.6) !important; }
+
+        /* --- Обнаружение загрузки Tailwind: анимация-маркер --- */
+        @keyframes __tw_test { to { opacity: 1; } }
+    </style>
+</head>
+<body class="p-4 md:p-6" style="background: var(--bg); color: var(--text-primary);">
+
+    <!-- Оффлайн-баннер -->
+    <div id="offlineBanner" class="hidden rounded-lg p-3 mb-4 text-sm text-center" style="background: var(--danger-bg); border: 1px solid var(--danger); color: var(--danger);">
+        ⚠️ <span data-i18n="offlineWarning">Some resources failed to load. The app may not work correctly offline.</span>
+    </div>
+
+    <div class="max-w-7xl mx-auto">
+        <!-- Шапка -->
+        <div class="mb-8">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                                        <h1 class="text-3xl md:text-4xl font-bold tracking-tight text-gray-900" data-i18n="appTitle">🎯 Kanban Board</h1>
+                    <p class="text-gray-500 mt-1" data-i18n="appSubtitle">Manage tasks, deadlines and colored tags</p>
+                </div>
+                <div class="flex gap-3">
+                    <!-- Theme Toggle -->
+                    <button id="themeToggle" class="px-3 py-1.5 rounded-lg text-sm font-medium transition bg-white border border-gray-300 shadow-sm" title="Toggle theme">🌙</button>
+                    <!-- Language Switcher -->
+                    <div class="flex items-center bg-white border border-gray-300 rounded-xl shadow-sm overflow-hidden">
+                        <button id="langEn" class="lang-btn px-3 py-2.5 text-sm font-medium transition-all bg-indigo-600 text-white">EN</button>
+                        <button id="langRu" class="lang-btn px-3 py-2.5 text-sm font-medium transition-all text-gray-600 hover:bg-gray-50">RU</button>
+                        <button id="langEs" class="lang-btn px-3 py-2.5 text-sm font-medium transition-all text-gray-600 hover:bg-gray-50">ES</button>
+                    </div>
+                    <button id="openTagsManagerBtn" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-2 text-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l5 5a2 2 0 0 1 .586 1.414V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M12 7v6"/><path d="M9 10h6"/></svg>
+                                                <span data-i18n="manageTags">Manage Tags</span>
+                    </button>
+                    <button id="openTrashBtn" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-2 text-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        <span data-i18n="trash">Trash</span>
+                        <span id="trashCount" class="bg-gray-200 text-gray-700 rounded-full px-2 py-0.5 text-xs">0</span>
+                    </button>
+                    <button id="openAddModalBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-2 text-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                        <span data-i18n="newTask">New Task</span>
+                    </button>
+                    <button id="exportBtn" data-i18n="exportData" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium px-3 py-2 rounded-lg shadow-sm transition text-sm">📥 Export</button>
+                    <button id="importBtn" data-i18n="importData" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium px-3 py-2 rounded-lg shadow-sm transition text-sm">📤 Import</button>
+                    <input type="file" id="importFileInput" accept=".json" class="hidden">
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter bar -->
+        <div id="filterBar" class="flex flex-wrap gap-3 items-center bg-white rounded-xl p-3 border border-gray-200 mb-4">
+            <!-- Search -->
+            <div class="flex items-center flex-1 min-w-[200px]">
+                <svg class="w-4 h-4 text-gray-400 -mr-6 z-10" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <input type="text" id="searchInput" data-i18n-placeholder="searchPlaceholder" placeholder="Search tasks..." class="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+            </div>
+            <!-- Priority dropdown -->
+            <select id="filterPriority" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none bg-white">
+                <option value="all" data-i18n="filterAll">All</option>
+                <option value="high" data-i18n="priorityHigh">High</option>
+                <option value="medium" data-i18n="priorityMedium">Medium</option>
+                <option value="low" data-i18n="priorityLow">Low</option>
+            </select>
+            <!-- Tag dropdown -->
+            <select id="filterTag" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none bg-white">
+                <option value="all" data-i18n="filterAll">All tags</option>
+            </select>
+            <!-- Deadline buttons -->
+            <div class="flex gap-1">
+                <button data-deadline="all" class="deadline-filter-btn px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-600 text-white transition" data-i18n="filterAll">All</button>
+                <button data-deadline="overdue" class="deadline-filter-btn px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-100 text-gray-600 transition hover:bg-gray-200" data-i18n="filterOverdue">Overdue</button>
+                <button data-deadline="today" class="deadline-filter-btn px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-100 text-gray-600 transition hover:bg-gray-200" data-i18n="filterToday">Today</button>
+                <button data-deadline="week" class="deadline-filter-btn px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-100 text-gray-600 transition hover:bg-gray-200" data-i18n="filterThisWeek">This week</button>
+            </div>
+            <!-- Clear filters -->
+            <button id="clearFiltersBtn" class="hidden px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 border border-red-200 hover:bg-red-50 rounded-lg transition" data-i18n="clearFilters">Clear filters</button>
+            <!-- Result counter -->
+            <span id="filterCount" class="hidden text-sm text-gray-500 ml-auto"></span>
+        </div>
+
+        <!-- Канбан-доска -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- Колонка 1 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 text-white">
+                    <div class="flex justify-between items-center">
+                        <h2 class="font-semibold text-lg" data-i18n="columnTodo">📋 To Do</h2>
+                        <span id="todoCount" class="bg-white/20 backdrop-blur px-2.5 py-0.5 rounded-full text-sm font-medium">0</span>
+                    </div>
+                </div>
+                <div id="todoColumn" class="column p-3 task-list bg-gray-50/30" data-status="todo"></div>
+            </div>
+
+            <!-- Колонка 2 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="bg-gradient-to-r from-amber-600 to-amber-700 px-4 py-3 text-white">
+                    <div class="flex justify-between items-center">
+                        <h2 class="font-semibold text-lg" data-i18n="columnProgress">⚙️ In Progress</h2>
+                        <span id="progressCount" class="bg-white/20 backdrop-blur px-2.5 py-0.5 rounded-full text-sm font-medium">0</span>
+                    </div>
+                </div>
+                <div id="progressColumn" class="column p-3 task-list bg-gray-50/30" data-status="in-progress"></div>
+            </div>
+
+            <!-- Колонка 3 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 py-3 text-white">
+                    <div class="flex justify-between items-center">
+                        <h2 class="font-semibold text-lg" data-i18n="columnDone">✅ Done</h2>
+                        <span id="doneCount" class="bg-white/20 backdrop-blur px-2.5 py-0.5 rounded-full text-sm font-medium">0</span>
+                    </div>
+                </div>
+                <div id="doneColumn" class="column p-3 task-list bg-gray-50/30" data-status="done"></div>
+            </div>
+        </div>
+
+        <!-- Модалка добавления задачи -->
+        <div id="addModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 hidden modal-transition">
+            <div class="rounded-2xl max-w-md w-full mx-4 p-6 shadow-xl" style="background: var(--surface);">
+                                <h3 class="text-xl font-bold text-gray-900 mb-4" data-i18n="createTask">➕ Create Task</h3>
+                <input type="text" id="modalTaskTitle" data-i18n-placeholder="taskTitlePlaceholder" placeholder="Task title" class="w-full px-4 py-3 border border-gray-200 rounded-xl mb-4 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition">
+                <textarea id="modalTaskDesc" data-i18n-placeholder="descPlaceholder" placeholder="Description (optional)" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl mb-4 focus:ring-2 focus:ring-indigo-400 outline-none transition"></textarea>
+                                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="priority">Priority</label>
+                    <select id="modalTaskPriority" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none">
+                        <option value="low">🟢 <span data-i18n="low">Low</span></option>
+                        <option value="medium" selected>🟡 <span data-i18n="medium">Medium</span></option>
+                        <option value="high">🔴 <span data-i18n="high">High</span></option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="deadline">Deadline</label>
+                    <input type="datetime-local" id="modalTaskDeadline" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none">
+                </div>
+                <div class="mb-4">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2" data-i18n="tags">Tags</label>
+                    <div id="modalTagsContainer" class="flex flex-wrap gap-2 mb-2">
+                        <!-- Динамические теги -->
+                    </div>
+                    <div class="flex gap-2">
+                        <select id="modalTagSelect" class="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-sm">
+                            <option value="" data-i18n="selectTag">Select tag...</option>
+                        </select>
+                        <button id="modalAddTagBtn" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition text-sm font-medium">+</button>
+                    </div>
+                </div>
+                <div class="flex gap-3 mt-2">
+                                        <button id="modalConfirmBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl transition font-medium" data-i18n="add">Add</button>
+                    <button id="modalCancelBtn" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl transition font-medium" data-i18n="cancel">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модалка редактирования задачи -->
+        <div id="editModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 hidden modal-transition">
+            <div class="rounded-2xl max-w-md w-full mx-4 p-6 shadow-xl" style="background: var(--surface);">
+                                <h3 class="text-xl font-bold text-gray-900 mb-4" data-i18n="editTask">✏️ Edit Task</h3>
+                <input type="text" id="editTaskTitle" data-i18n-placeholder="taskTitlePlaceholder" placeholder="Task title" class="w-full px-4 py-3 border border-gray-200 rounded-xl mb-4 focus:ring-2 focus:ring-indigo-400 outline-none">
+                <textarea id="editTaskDesc" data-i18n-placeholder="editDescPlaceholder" placeholder="Description" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl mb-4 focus:ring-2 focus:ring-indigo-400 outline-none"></textarea>
+                                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="priority">Priority</label>
+                    <select id="editTaskPriority" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none">
+                        <option value="low">🟢 <span data-i18n="low">Low</span></option>
+                        <option value="medium">🟡 <span data-i18n="medium">Medium</span></option>
+                        <option value="high">🔴 <span data-i18n="high">High</span></option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="deadline">Deadline</label>
+                    <input type="datetime-local" id="editTaskDeadline" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none">
+                </div>
+                <div class="mb-4">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2" data-i18n="tags">Tags</label>
+                    <div id="editTagsContainer" class="flex flex-wrap gap-2 mb-2"></div>
+                    <div class="flex gap-2">
+                        <select id="editTagSelect" class="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-sm">
+                            <option value="" data-i18n="selectTag">Select tag...</option>
+                        </select>
+                        <button id="editAddTagBtn" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition text-sm font-medium">+</button>
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                                        <button id="editConfirmBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl transition font-medium" data-i18n="save">Save</button>
+                    <button id="editCancelBtn" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl transition font-medium" data-i18n="cancel">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модалка управления тегами -->
+        <div id="tagsManagerModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 hidden modal-transition">
+            <div class="rounded-2xl max-w-lg w-full mx-4 p-6 shadow-xl" style="background: var(--surface);">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-gray-900" data-i18n="manageTagsTitle">🏷️ Manage Tags</h3>
+                    <button id="closeTagsManagerBtn" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                </div>
+                                <div class="mb-4">
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="newTagName" data-i18n-placeholder="tagNamePlaceholder" placeholder="Tag name" class="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none">
+                        <select id="newTagColor" class="px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none">
+                                                        <option value="0" data-i18n="colorBlue">🔵 Blue</option>
+                            <option value="1" data-i18n="colorGreen">🟢 Green</option>
+                            <option value="2" data-i18n="colorRed">🔴 Red</option>
+                            <option value="3" data-i18n="colorYellow">🟡 Yellow</option>
+                            <option value="4" data-i18n="colorPink">🌸 Pink</option>
+                            <option value="5" data-i18n="colorPurple">💜 Purple</option>
+                            <option value="6" data-i18n="colorTeal">💚 Teal</option>
+                            <option value="7" data-i18n="colorOrange">🧡 Orange</option>
+                            <option value="8" data-i18n="colorCherry">❤️ Cherry</option>
+                            <option value="9" data-i18n="colorLavender">🟣 Lavender</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="tagsList" class="space-y-2 max-h-96 overflow-y-auto">
+                    <!-- Список тегов -->
+                </div>
+                <div class="mt-4 flex justify-end gap-2">
+                                        <button id="addTagBtn" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition font-medium" data-i18n="add">Add</button>
+                    <button id="closeTagsManagerBtn2" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition" data-i18n="close">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модалка корзины -->
+        <div id="trashModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 hidden modal-transition">
+            <div class="rounded-2xl max-w-2xl w-full mx-4 p-6 shadow-xl max-h-[80vh] flex flex-col" style="background: var(--surface);">
+                <div class="flex justify-between items-center mb-4">
+                                        <h3 class="text-xl font-bold text-gray-900" data-i18n="trashTitle">🗑️ Trash</h3>
+                    <button id="clearTrashBtn" class="text-red-600 hover:text-red-700 text-sm font-medium px-3 py-1 rounded-lg border border-red-200 hover:bg-red-50 transition" data-i18n="clearAll">Clear all</button>
+                </div>
+                <div id="trashList" class="flex-1 overflow-y-auto space-y-2">
+                    <!-- Список удалённых задач -->
+                </div>
+                <div class="mt-4 flex justify-end">
+                    <button id="closeTrashBtn" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition" data-i18n="close">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard shortcuts help panel -->
+    <div id="shortcutsHelp" class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-2xl max-w-sm w-full mx-4 p-6 shadow-xl">
+            <h3 class="text-lg font-bold text-gray-900 mb-3">⌨️ Keyboard Shortcuts</h3>
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between"><span class="text-gray-600">New task</span><kbd class="bg-gray-100 px-2 py-0.5 rounded text-xs font-mono">N</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-600">Close modal</span><kbd class="bg-gray-100 px-2 py-0.5 rounded text-xs font-mono">Esc</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-600">Undo delete</span><kbd class="bg-gray-100 px-2 py-0.5 rounded text-xs font-mono">Ctrl+Z</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-600">Search</span><kbd class="bg-gray-100 px-2 py-0.5 rounded text-xs font-mono">F</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-600">Show shortcuts</span><kbd class="bg-gray-100 px-2 py-0.5 rounded text-xs font-mono">?</kbd></div>
+            </div>
+            <button onclick="document.getElementById('shortcutsHelp').classList.add('hidden')" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl transition font-medium text-sm">OK</button>
+        </div>
+    </div>
+
+    <script>
+        // ---------- Локализация ----------
+        let currentLang = localStorage.getItem('kanban_lang') || 'en';
+        
+        const translations = {
+            en: {
+                pageTitle: 'Kanban Board',
+                appTitle: '🎯 Kanban Board',
+                appSubtitle: 'Manage tasks, deadlines and colored tags',
+                columnTodo: '📋 To Do',
+                columnProgress: '⚙️ In Progress',
+                columnDone: '✅ Done',
+                createTask: '➕ Create Task',
+                editTask: '✏️ Edit Task',
+                taskTitlePlaceholder: 'Task title',
+                descPlaceholder: 'Description (optional)',
+                editDescPlaceholder: 'Description',
+                priority: 'Priority',
+                deadline: 'Deadline',
+                tags: 'Tags',
+                selectTag: 'Select tag...',
+                add: 'Add',
+                cancel: 'Cancel',
+                save: 'Save',
+                close: 'Close',
+                manageTags: 'Manage Tags',
+                manageTagsTitle: '🏷️ Manage Tags',
+                trash: 'Trash',
+                trashTitle: '🗑️ Trash',
+                newTask: 'New Task',
+                clearAll: 'Clear all',
+                tagNamePlaceholder: 'Tag name',
+                colorBlue: '🔵 Blue',
+                colorGreen: '🟢 Green',
+                colorRed: '🔴 Red',
+                colorYellow: '🟡 Yellow',
+                colorPink: '🌸 Pink',
+                colorPurple: '💜 Purple',
+                colorTeal: '💚 Teal',
+                colorOrange: '🧡 Orange',
+                colorCherry: '❤️ Cherry',
+                colorLavender: '🟣 Lavender',
+                low: 'Low',
+                medium: 'Medium',
+                high: 'High',
+                statusTodo: 'To Do',
+                statusProgress: 'In Progress',
+                statusDone: 'Done',
+                priorityHigh: '🔴 High',
+                priorityMedium: '🟡 Medium',
+                priorityLow: '🟢 Low',
+                noTags: 'No tags. Create one!',
+                noTasks: '✨ No tasks',
+                trashEmpty: '🗑️ Trash is empty',
+                confirmDeleteTag: (name) => `Delete tag "${name}"? It will be removed from all tasks.`,
+                confirmClearTrash: 'Clear trash permanently?',
+                alertTagExists: 'A tag with that name already exists!',
+                offlineWarning: 'Some resources failed to load. The app may not work correctly offline.',
+                searchPlaceholder: 'Search tasks...',
+                filterAll: 'All',
+                filterPriority: 'Priority',
+                filterTag: 'Tag',
+                filterDeadline: 'Deadline',
+                filterOverdue: 'Overdue',
+                filterToday: 'Today',
+                filterThisWeek: 'This week',
+                clearFilters: 'Clear filters',
+                showingResults: (showing, total) => `Showing ${showing} of ${total} tasks`,
+                exportData: '📥 Export',
+                importData: '📤 Import',
+                confirmImport: (count) => `Import ${count} tasks? Existing tasks will be preserved.`,
+                importSuccess: (count) => `Successfully imported ${count} tasks.`,
+                importError: 'Failed to import. Invalid file format.'
+            },
+            ru: {
+                pageTitle: 'Канбан доска',
+                appTitle: '🎯 Канбан доска',
+                appSubtitle: 'Управляй задачами, дедлайнами и цветными тегами',
+                columnTodo: '📋 К выполнению',
+                columnProgress: '⚙️ В работе',
+                columnDone: '✅ Готово',
+                createTask: '➕ Создать задачу',
+                editTask: '✏️ Редактировать',
+                taskTitlePlaceholder: 'Название задачи',
+                descPlaceholder: 'Описание (необязательно)',
+                editDescPlaceholder: 'Описание',
+                priority: 'Приоритет',
+                deadline: 'Дедлайн',
+                tags: 'Теги',
+                selectTag: 'Выберите тег...',
+                add: 'Добавить',
+                cancel: 'Отмена',
+                save: 'Сохранить',
+                close: 'Закрыть',
+                manageTags: 'Управление тегами',
+                manageTagsTitle: '🏷️ Управление тегами',
+                trash: 'Корзина',
+                trashTitle: '🗑️ Корзина',
+                newTask: 'Новая задача',
+                clearAll: 'Очистить всё',
+                tagNamePlaceholder: 'Название тега',
+                colorBlue: '🔵 Синий',
+                colorGreen: '🟢 Зелёный',
+                colorRed: '🔴 Красный',
+                colorYellow: '🟡 Жёлтый',
+                colorPink: '🌸 Розовый',
+                colorPurple: '💜 Фиолетовый',
+                colorTeal: '💚 Бирюзовый',
+                colorOrange: '🧡 Оранжевый',
+                colorCherry: '❤️ Вишнёвый',
+                colorLavender: '🟣 Лавандовый',
+                low: 'Низкий',
+                medium: 'Средний',
+                high: 'Высокий',
+                statusTodo: 'К выполнению',
+                statusProgress: 'В работе',
+                statusDone: 'Готово',
+                priorityHigh: '🔴 Высокий',
+                priorityMedium: '🟡 Средний',
+                priorityLow: '🟢 Низкий',
+                noTags: 'Нет тегов. Создайте первый!',
+                noTasks: '✨ Нет задач',
+                trashEmpty: '🗑️ Корзина пуста',
+                confirmDeleteTag: (name) => `Удалить тег "${name}"? Он будет удалён из всех задач.`,
+                confirmClearTrash: 'Очистить корзину безвозвратно?',
+                alertTagExists: 'Тег с таким именем уже существует!',
+                offlineWarning: 'Не удалось загрузить некоторые ресурсы. Приложение может работать некорректно без интернета.',
+                searchPlaceholder: 'Поиск задач...',
+                filterAll: 'Все',
+                filterPriority: 'Приоритет',
+                filterTag: 'Тег',
+                filterDeadline: 'Дедлайн',
+                filterOverdue: 'Просрочено',
+                filterToday: 'Сегодня',
+                filterThisWeek: 'На неделе',
+                clearFilters: 'Сбросить фильтры',
+                showingResults: (showing, total) => `Показано ${showing} из ${total} задач`,
+                exportData: '📥 Экспорт',
+                importData: '📤 Импорт',
+                confirmImport: (count) => `Импортировать ${count} задач? Существующие задачи будут сохранены.`,
+                importSuccess: (count) => `Успешно импортировано ${count} задач.`,
+                importError: 'Ошибка импорта. Неверный формат файла.'
+            },
+            es: {
+                pageTitle: 'Tablero Kanban',
+                appTitle: '🎯 Tablero Kanban',
+                appSubtitle: 'Gestiona tareas, plazos y etiquetas de colores',
+                columnTodo: '📋 Por hacer',
+                columnProgress: '⚙️ En progreso',
+                columnDone: '✅ Completado',
+                createTask: '➕ Crear tarea',
+                editTask: '✏️ Editar tarea',
+                taskTitlePlaceholder: 'Título de la tarea',
+                descPlaceholder: 'Descripción (opcional)',
+                editDescPlaceholder: 'Descripción',
+                priority: 'Prioridad',
+                deadline: 'Fecha límite',
+                tags: 'Etiquetas',
+                selectTag: 'Seleccionar etiqueta...',
+                add: 'Añadir',
+                cancel: 'Cancelar',
+                save: 'Guardar',
+                close: 'Cerrar',
+                manageTags: 'Gestionar etiquetas',
+                manageTagsTitle: '🏷️ Gestionar etiquetas',
+                trash: 'Papelera',
+                trashTitle: '🗑️ Papelera',
+                newTask: 'Nueva tarea',
+                clearAll: 'Vaciar todo',
+                tagNamePlaceholder: 'Nombre de etiqueta',
+                colorBlue: '🔵 Azul',
+                colorGreen: '🟢 Verde',
+                colorRed: '🔴 Rojo',
+                colorYellow: '🟡 Amarillo',
+                colorPink: '🌸 Rosa',
+                colorPurple: '💜 Púrpura',
+                colorTeal: '💚 Turquesa',
+                colorOrange: '🧡 Naranja',
+                colorCherry: '❤️ Cereza',
+                colorLavender: '🟣 Lavanda',
+                low: 'Bajo',
+                medium: 'Medio',
+                high: 'Alto',
+                statusTodo: 'Por hacer',
+                statusProgress: 'En progreso',
+                statusDone: 'Completado',
+                priorityHigh: '🔴 Alto',
+                priorityMedium: '🟡 Medio',
+                priorityLow: '🟢 Bajo',
+                noTags: 'No hay etiquetas. ¡Crea una!',
+                noTasks: '✨ Sin tareas',
+                trashEmpty: '🗑️ La papelera está vacía',
+                confirmDeleteTag: (name) => `¿Eliminar la etiqueta "${name}"? Se eliminará de todas las tareas.`,
+                confirmClearTrash: '¿Vaciar la papelera permanentemente?',
+                alertTagExists: '¡Ya existe una etiqueta con ese nombre!',
+                offlineWarning: 'Algunos recursos no se cargaron. Es posible que la aplicación no funcione correctamente sin conexión.',
+                searchPlaceholder: 'Buscar tareas...',
+                filterAll: 'Todos',
+                filterPriority: 'Prioridad',
+                filterTag: 'Etiqueta',
+                filterDeadline: 'Plazo',
+                filterOverdue: 'Vencidas',
+                filterToday: 'Hoy',
+                filterThisWeek: 'Esta semana',
+                clearFilters: 'Limpiar filtros',
+                showingResults: (showing, total) => `Mostrando ${showing} de ${total} tareas`,
+                exportData: '📥 Exportar',
+                importData: '📤 Importar',
+                confirmImport: (count) => `¿Importar ${count} tareas? Las tareas existentes se conservarán.`,
+                importSuccess: (count) => `${count} tareas importadas correctamente.`,
+                importError: 'Error al importar. Formato de archivo no válido.'
+            }
+        };
+        
+        // ---------- Тёмная тема ----------
+        function toggleTheme() {
+            document.documentElement.classList.toggle('dark');
+            const isDark = document.documentElement.classList.contains('dark');
+            localStorage.setItem('kanban_theme', isDark ? 'dark' : 'light');
+            document.getElementById('themeToggle').textContent = isDark ? '☀️' : '🌙';
+        }
+        
+        function initTheme() {
+            const saved = localStorage.getItem('kanban_theme');
+            if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+                document.getElementById('themeToggle').textContent = '☀️';
+            }
+        }
+        
+        function t(key, ...args) {
+            const lang = translations[currentLang];
+            if (!lang) return key;
+            const val = lang[key];
+            if (typeof val === 'function') return val(...args);
+            return val || key;
+        }
+        
+        function applyTranslations() {
+            // Обновляем HTML-элементы с data-i18n
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                el.innerHTML = t(key);
+            });
+            // Обновляем placeholder'ы
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                el.placeholder = t(key);
+            });
+            // Обновляем заголовок страницы
+            document.title = t('pageTitle');
+            // Обновляем кнопки переключателя
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.remove('bg-indigo-600', 'text-white');
+                btn.classList.add('text-gray-600', 'hover:bg-gray-50');
+            });
+            const activeBtn = document.getElementById('lang' + currentLang.charAt(0).toUpperCase() + currentLang.slice(1));
+            if (activeBtn) {
+                activeBtn.classList.remove('text-gray-600', 'hover:bg-gray-50');
+                activeBtn.classList.add('bg-indigo-600', 'text-white');
+            }
+        }
+        
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('kanban_lang', lang);
+            document.documentElement.lang = lang;
+                        applyTranslations();
+            renderAllColumns();
+            renderTagsList();
+            renderTrashList();
+            updateTagSelects();
+            updateFilterUI();
+        }
+        
+        // ---------- Модель данных ----------
+        let tasks = [];
+        let editingTaskId = null;
+        let lastDeletedTask = null; // stores { id, status } of soft-deleted task
+        
+        // Хранилище тегов: { id, name, colorIndex }
+        let tagsLibrary = [];
+        let nextTagId = 1;
+
+        const STATUS = { TODO: 'todo', IN_PROGRESS: 'in-progress', DONE: 'done' };
+        const PRIORITY = { LOW: 'low', MEDIUM: 'medium', HIGH: 'high' };
+
+        // Фильтры (не сохраняются в localStorage)
+        let filters = { search: '', priority: 'all', tag: 'all', deadline: 'all' };
+
+        function debounce(fn, ms) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; }
+
+        function isToday(date) {
+            const now = new Date();
+            const d = new Date(date);
+            return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+        }
+
+        function isThisWeek(date) {
+            const now = new Date();
+            const d = new Date(date);
+            const nowDayOfWeek = now.getDay(); // 0=Sun, 1=Mon...
+            const mondayOffset = nowDayOfWeek === 0 ? -6 : 1 - nowDayOfWeek;
+            const weekStart = new Date(now);
+            weekStart.setDate(now.getDate() + mondayOffset);
+            weekStart.setHours(0, 0, 0, 0);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 6);
+            weekEnd.setHours(23, 59, 59, 999);
+            return d >= weekStart && d <= weekEnd;
+        }
+
+        function getFilteredTasks() {
+            return tasks.filter(t => {
+                if (t.isDeleted) return false;
+                // Search filter
+                if (filters.search) {
+                    const term = filters.search.toLowerCase();
+                    const titleMatch = t.title.toLowerCase().includes(term);
+                    const descMatch = (t.description || '').toLowerCase().includes(term);
+                    if (!titleMatch && !descMatch) return false;
+                }
+                // Priority filter
+                if (filters.priority !== 'all' && t.priority !== filters.priority) return false;
+                // Tag filter
+                if (filters.tag !== 'all' && (!t.tags || !t.tags.includes(filters.tag))) return false;
+                // Deadline filter
+                if (filters.deadline !== 'all') {
+                    if (!t.deadline) return false;
+                    if (filters.deadline === 'overdue' && new Date(t.deadline) >= new Date()) return false;
+                    if (filters.deadline === 'today' && !isToday(t.deadline)) return false;
+                    if (filters.deadline === 'week' && !isThisWeek(t.deadline)) return false;
+                }
+                return true;
+            });
+        }
+
+        function updateFilterUI() {
+            const anyActive = filters.search || filters.priority !== 'all' || filters.tag !== 'all' || filters.deadline !== 'all';
+            const clearBtn = document.getElementById('clearFiltersBtn');
+            const filterCount = document.getElementById('filterCount');
+            if (clearBtn) clearBtn.classList.toggle('hidden', !anyActive);
+            if (!anyActive) {
+                if (filterCount) filterCount.classList.add('hidden');
+                return;
+            }
+            const filtered = getFilteredTasks();
+            const total = tasks.filter(t => !t.isDeleted).length;
+            if (filterCount) {
+                filterCount.classList.remove('hidden');
+                filterCount.innerText = t('showingResults', filtered.length, total);
+            }
+        }
+
+        function applyFilters() {
+            renderAllColumns();
+            updateFilterUI();
+        }
+
+        const debouncedApplyFilters = debounce(applyFilters, 200);
+
+        // Цвета для тегов (CSS классы)
+        const tagColorClasses = [
+            'tag-color-0', 'tag-color-1', 'tag-color-2', 'tag-color-3', 'tag-color-4',
+            'tag-color-5', 'tag-color-6', 'tag-color-7', 'tag-color-8', 'tag-color-9'
+        ];
+
+        // DOM элементы
+        const todoContainer = document.getElementById('todoColumn');
+        const progressContainer = document.getElementById('progressColumn');
+        const doneContainer = document.getElementById('doneColumn');
+        const todoCountSpan = document.getElementById('todoCount');
+        const progressCountSpan = document.getElementById('progressCount');
+        const doneCountSpan = document.getElementById('doneCount');
+        const trashCountSpan = document.getElementById('trashCount');
+        
+        const openAddModalBtn = document.getElementById('openAddModalBtn');
+        const openTrashBtn = document.getElementById('openTrashBtn');
+        const openTagsManagerBtn = document.getElementById('openTagsManagerBtn');
+        const addModal = document.getElementById('addModal');
+        const editModal = document.getElementById('editModal');
+        const trashModal = document.getElementById('trashModal');
+        const tagsManagerModal = document.getElementById('tagsManagerModal');
+        
+        // Элементы модалки тегов
+        const newTagName = document.getElementById('newTagName');
+        const newTagColor = document.getElementById('newTagColor');
+        const addTagBtn = document.getElementById('addTagBtn');
+        const tagsList = document.getElementById('tagsList');
+        
+        // Остальные элементы (как в предыдущих этапах)
+        const modalTaskTitle = document.getElementById('modalTaskTitle');
+        const modalTaskDesc = document.getElementById('modalTaskDesc');
+        const modalTaskPriority = document.getElementById('modalTaskPriority');
+        const modalTaskDeadline = document.getElementById('modalTaskDeadline');
+        const modalTagSelect = document.getElementById('modalTagSelect');
+        const modalAddTagBtn = document.getElementById('modalAddTagBtn');
+        const modalTagsContainer = document.getElementById('modalTagsContainer');
+        const modalConfirmBtn = document.getElementById('modalConfirmBtn');
+        const modalCancelBtn = document.getElementById('modalCancelBtn');
+        
+        const editTaskTitle = document.getElementById('editTaskTitle');
+        const editTaskDesc = document.getElementById('editTaskDesc');
+        const editTaskPriority = document.getElementById('editTaskPriority');
+        const editTaskDeadline = document.getElementById('editTaskDeadline');
+        const editTagSelect = document.getElementById('editTagSelect');
+        const editAddTagBtn = document.getElementById('editAddTagBtn');
+        const editTagsContainer = document.getElementById('editTagsContainer');
+        const editConfirmBtn = document.getElementById('editConfirmBtn');
+        const editCancelBtn = document.getElementById('editCancelBtn');
+        
+        const trashList = document.getElementById('trashList');
+        const clearTrashBtn = document.getElementById('clearTrashBtn');
+        const closeTrashBtn = document.getElementById('closeTrashBtn');
+        
+        // Текущие теги для модалок
+        let currentModalTags = [];
+        let currentEditTags = [];
+
+        // ---------- Инициализация тегов ----------
+        function initTagsLibrary() {
+            const stored = localStorage.getItem('kanban_stage5_tags');
+            if (stored) {
+                try {
+                    tagsLibrary = JSON.parse(stored);
+                    nextTagId = Math.max(...tagsLibrary.map(t => t.id), 0) + 1;
+                } catch(e) { tagsLibrary = []; }
+            }
+                        if (!tagsLibrary.length) {
+                tagsLibrary = [
+                    { id: nextTagId++, name: 'frontend', colorIndex: 0 },
+                    { id: nextTagId++, name: 'bug', colorIndex: 2 },
+                    { id: nextTagId++, name: 'feature', colorIndex: 1 },
+                    { id: nextTagId++, name: 'design', colorIndex: 3 },
+                ];
+                saveTagsLibrary();
+            }
+            renderTagsList();
+            updateTagSelects();
+        }
+        
+        function saveTagsLibrary() {
+            localStorage.setItem('kanban_stage5_tags', JSON.stringify(tagsLibrary));
+        }
+        
+        function renderTagsList() {
+            if (!tagsList) return;
+            if (tagsLibrary.length === 0) {
+                tagsList.innerHTML = '<div class="text-center py-8 text-gray-400 text-sm">' + t('noTags') + '</div>';
+                return;
+            }
+            tagsList.innerHTML = tagsLibrary.map(tag => `
+                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-200">
+                    <div class="flex items-center gap-2">
+                        <span class="tag ${tagColorClasses[tag.colorIndex]}">${escapeHtml(tag.name)}</span>
+                    </div>
+                    <button class="delete-tag-btn text-gray-400 hover:text-red-500 transition p-1" data-id="${tag.id}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                </div>
+            `).join('');
+            
+            tagsList.querySelectorAll('.delete-tag-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const tagId = parseInt(btn.dataset.id);
+                    deleteTag(tagId);
+                });
+            });
+        }
+        
+        function deleteTag(tagId) {
+            const tagToDelete = tagsLibrary.find(t => t.id === tagId);
+            if (tagToDelete && confirm(t('confirmDeleteTag', tagToDelete.name))) {
+                // Удаляем тег из всех задач
+                tasks.forEach(task => {
+                    if (task.tags) {
+                        task.tags = task.tags.filter(t => t !== tagToDelete.name);
+                    }
+                });
+                // Удаляем из библиотеки
+                tagsLibrary = tagsLibrary.filter(t => t.id !== tagId);
+                saveTagsLibrary();
+                saveTasks();
+                renderAllColumns();
+                renderTagsList();
+                updateTagSelects();
+            }
+        }
+        
+        function addNewTag(name, colorIndex) {
+            if (!name.trim()) return;
+            if (tagsLibrary.some(t => t.name.toLowerCase() === name.trim().toLowerCase())) {
+                alert(t('alertTagExists'));
+                return;
+            }
+            tagsLibrary.push({ id: nextTagId++, name: name.trim(), colorIndex: parseInt(colorIndex) });
+            saveTagsLibrary();
+            renderTagsList();
+            updateTagSelects();
+        }
+        
+        function updateTagSelects() {
+            const options = tagsLibrary.map(tag => `<option value="${escapeHtml(tag.name)}">${escapeHtml(tag.name)}</option>`).join('');
+            if (modalTagSelect) modalTagSelect.innerHTML = '<option value="">' + t('selectTag') + '</option>' + options;
+            if (editTagSelect) editTagSelect.innerHTML = '<option value="">' + t('selectTag') + '</option>' + options;
+            // Populate filter tag dropdown
+            const filterTag = document.getElementById('filterTag');
+            if (filterTag) filterTag.innerHTML = '<option value="all">' + t('filterAll') + '</option>' + options;
+        }
+        
+        function getTagColorClass(tagName) {
+            const tag = tagsLibrary.find(t => t.name === tagName);
+            return tag ? tagColorClasses[tag.colorIndex] : 'tag-color-0';
+        }
+        
+                // ---------- Управление тегами в модалках ----------
+                function createTagRemoveHandler(container, tagsArr) {
+                    return function removeHandler(tag) {
+                        const idx = tagsArr.findIndex(t => t === tag);
+                        if (idx !== -1) {
+                            tagsArr.splice(idx, 1);
+                            renderTagContainerContent(container, tagsArr, removeHandler);
+                        }
+                    };
+                }
+        
+        function renderTagContainerContent(container, tags, onRemove) {
+            container.innerHTML = tags.map(tag => `
+                <span class="tag ${getTagColorClass(tag)}">
+                    ${escapeHtml(tag)}
+                    <button class="ml-1 text-xs hover:opacity-70" data-tag="${escapeHtml(tag)}">&times;</button>
+                </span>
+            `).join('');
+            
+            container.querySelectorAll('button[data-tag]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const tagName = btn.getAttribute('data-tag');
+                    onRemove(tagName);
+                });
+            });
+        }
+        
+        // ---------- Загрузка / сохранение задач ----------
+        function loadTasks() {
+            const stored = localStorage.getItem('kanban_stage5_tasks');
+            if (stored) {
+                try {
+                    tasks = JSON.parse(stored);
+                } catch(e) { tasks = []; }
+            }
+            if (!tasks.length) {
+                const now = new Date();
+                const tomorrow = new Date(now);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                tasks = [
+                                        { id: crypto.randomUUID(), title: 'Learn Drag & Drop basics', description: 'Watch SortableJS tutorials', priority: PRIORITY.HIGH, status: STATUS.TODO, isDeleted: false, deadline: tomorrow.toISOString(), tags: ['frontend'] },
+                    { id: crypto.randomUUID(), title: 'Design database schema', description: 'Plan card structure', priority: PRIORITY.MEDIUM, status: STATUS.IN_PROGRESS, isDeleted: false, deadline: null, tags: [] },
+                    { id: crypto.randomUUID(), title: 'Style column layout', description: 'Responsive design and shadows', priority: PRIORITY.LOW, status: STATUS.DONE, isDeleted: false, deadline: null, tags: ['design'] },
+                    { id: crypto.randomUUID(), title: 'Set up colored tags', description: 'Add color management', priority: PRIORITY.MEDIUM, status: STATUS.TODO, isDeleted: false, deadline: null, tags: ['feature'] },
+                ];
+                saveTasks();
+            }
+            renderAllColumns();
+            updateTrashCount();
+        }
+        
+        function saveTasks() {
+            localStorage.setItem('kanban_stage5_tasks', JSON.stringify(tasks));
+        }
+        
+        // ---------- Export / Import ----------
+        function exportData() {
+            const data = {
+                version: 1,
+                exportedAt: new Date().toISOString(),
+                tasks: tasks,
+                tagsLibrary: tagsLibrary,
+                nextTagId: nextTagId
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'kanban-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        function importData(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (!data.tasks || !Array.isArray(data.tasks)) throw new Error('Invalid format');
+                    if (!confirm(t('confirmImport', data.tasks.length))) return;
+                    // Merge tags
+                    if (data.tagsLibrary && Array.isArray(data.tagsLibrary)) {
+                        data.tagsLibrary.forEach(importedTag => {
+                            if (!tagsLibrary.some(t => t.name === importedTag.name)) {
+                                tagsLibrary.push({ ...importedTag, id: nextTagId++ });
+                            }
+                        });
+                        saveTagsLibrary();
+                    }
+                    // Merge tasks (skip duplicates by id)
+                    const existingIds = new Set(tasks.map(t => t.id));
+                    data.tasks.forEach(importedTask => {
+                        if (!existingIds.has(importedTask.id)) {
+                            tasks.push(importedTask);
+                        }
+                    });
+                    saveTasks();
+                    renderAllColumns();
+                    renderTagsList();
+                    updateTagSelects();
+                    alert(t('importSuccess', data.tasks.length));
+                } catch (err) {
+                    alert(t('importError'));
+                }
+            };
+            reader.readAsText(file);
+        }
+        
+        // ---------- Основные операции ----------
+        function addTask(title, description, priority, deadline, tags) {
+            if (!title.trim()) return false;
+            const newTask = {
+                id: crypto.randomUUID(),
+                title: title.trim(),
+                description: description || '',
+                priority: priority || PRIORITY.MEDIUM,
+                status: STATUS.TODO,
+                isDeleted: false,
+                createdAt: new Date().toISOString(),
+                deadline: deadline || null,
+                tags: tags || []
+            };
+            tasks.push(newTask);
+            saveTasks();
+            refreshColumn(STATUS.TODO);
+            return true;
+        }
+        
+        function updateTask(id, title, description, priority, deadline, tags) {
+            const task = tasks.find(t => t.id === id);
+            if (task && !task.isDeleted) {
+                task.title = title.trim();
+                task.description = description || '';
+                task.priority = priority;
+                task.deadline = deadline || null;
+                task.tags = tags || [];
+                saveTasks();
+                renderAllColumns();
+                return true;
+            }
+            return false;
+        }
+        
+                function softDeleteTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (task && !task.isDeleted) {
+                lastDeletedTask = { id: task.id, status: task.status };
+                task.isDeleted = true;
+                saveTasks();
+                const deletedStatus = task.status;
+                refreshColumn(deletedStatus);
+            }
+        }
+        
+        function restoreTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (task && task.isDeleted) {
+                task.isDeleted = false;
+                saveTasks();
+                renderAllColumns();
+            }
+        }
+        
+        function permanentDeleteTask(id) {
+            tasks = tasks.filter(t => t.id !== id);
+            if (lastDeletedTask && lastDeletedTask.id === id) lastDeletedTask = null;
+            saveTasks();
+            updateTrashCount();
+            renderTrashList();
+        }
+        
+        function clearTrash() {
+            tasks = tasks.filter(t => !t.isDeleted);
+            lastDeletedTask = null;
+            saveTasks();
+            updateTrashCount();
+            renderTrashList();
+        }
+        
+        function updateTaskStatus(id, newStatus) {
+            const task = tasks.find(t => t.id === id);
+            if (task && task.status !== newStatus && !task.isDeleted) {
+                task.status = newStatus;
+                saveTasks();
+                return true;
+            }
+            return false;
+        }
+        
+        function updateTrashCount() {
+            const trashCount = tasks.filter(t => t.isDeleted === true).length;
+            if (trashCountSpan) trashCountSpan.innerText = trashCount;
+        }
+        
+        // ---------- Undo last delete ----------
+        function undoLastDelete() {
+            if (!lastDeletedTask) return;
+            const task = tasks.find(t => t.id === lastDeletedTask.id);
+            if (task && task.isDeleted) {
+                task.isDeleted = false;
+                lastDeletedTask = null;
+                saveTasks();
+                refreshColumn(task.status);
+            }
+        }
+        
+        // ---------- Keyboard shortcuts help ----------
+        function toggleShortcutsHelp() {
+            const panel = document.getElementById('shortcutsHelp');
+            panel.classList.toggle('hidden');
+        }
+        
+        // ---------- Drag & Drop ----------
+        function getOrderedIdsFromContainer(container) {
+            const cards = container.querySelectorAll('.kanban-card');
+            const ids = [];
+            cards.forEach(card => {
+                const id = card.getAttribute('data-id');
+                if (id) ids.push(id);
+            });
+            return ids;
+        }
+
+        function syncFullOrder() {
+            const todoIds = getOrderedIdsFromContainer(todoContainer);
+            const progressIds = getOrderedIdsFromContainer(progressContainer);
+            const doneIds = getOrderedIdsFromContainer(doneContainer);
+            
+            const tasksMap = new Map();
+            tasks.forEach(task => tasksMap.set(task.id, task));
+            
+            const newTasksOrder = [];
+            todoIds.forEach(id => { if (tasksMap.has(id) && !tasksMap.get(id).isDeleted) newTasksOrder.push(tasksMap.get(id)); });
+            progressIds.forEach(id => { if (tasksMap.has(id) && !tasksMap.get(id).isDeleted) newTasksOrder.push(tasksMap.get(id)); });
+            doneIds.forEach(id => { if (tasksMap.has(id) && !tasksMap.get(id).isDeleted) newTasksOrder.push(tasksMap.get(id)); });
+            
+            const deletedTasks = tasks.filter(t => t.isDeleted);
+            const allActiveTasks = [...newTasksOrder, ...deletedTasks];
+            if (allActiveTasks.length === tasks.length) {
+                tasks = allActiveTasks;
+                saveTasks();
+            }
+        }
+        
+        function onDragEnd(evt) {
+            const movedElement = evt.item;
+            if (!movedElement) return;
+            const taskId = movedElement.getAttribute('data-id');
+            if (!taskId) return;
+            const task = tasks.find(t => t.id === taskId);
+            if (!task || task.isDeleted) return;
+            const targetContainer = evt.to;
+            const targetColumnStatus = targetContainer.getAttribute('data-status');
+            if (!targetColumnStatus) return;
+            const oldStatus = task.status;
+            let statusChanged = false;
+            if (task.status !== targetColumnStatus) {
+                statusChanged = updateTaskStatus(taskId, targetColumnStatus);
+            }
+            setTimeout(() => {
+                syncFullOrder();
+                if (statusChanged) {
+                    refreshColumns([oldStatus, targetColumnStatus]);
+                }
+            }, 10);
+        }
+        
+        // ---------- Рендер ----------
+        function renderAllColumns() {
+            const filteredTasks = getFilteredTasks();
+            const todoTasks = filteredTasks.filter(t => t.status === STATUS.TODO);
+            const progressTasks = filteredTasks.filter(t => t.status === STATUS.IN_PROGRESS);
+            const doneTasks = filteredTasks.filter(t => t.status === STATUS.DONE);
+            
+            todoCountSpan.innerText = todoTasks.length;
+            progressCountSpan.innerText = progressTasks.length;
+            doneCountSpan.innerText = doneTasks.length;
+            
+            renderColumn(todoContainer, todoTasks, STATUS.TODO);
+            renderColumn(progressContainer, progressTasks, STATUS.IN_PROGRESS);
+            renderColumn(doneContainer, doneTasks, STATUS.DONE);
+            
+            updateTrashCount();
+        }
+
+        function refreshColumn(status) {
+            const filteredTasks = getFilteredTasks();
+            const columnTasks = filteredTasks.filter(t => t.status === status);
+            const container = status === STATUS.TODO ? todoContainer : (status === STATUS.IN_PROGRESS ? progressContainer : doneContainer);
+            const counter = status === STATUS.TODO ? todoCountSpan : (status === STATUS.IN_PROGRESS ? progressCountSpan : doneCountSpan);
+            if (counter) counter.innerText = columnTasks.length;
+            if (container) renderColumn(container, columnTasks, status);
+            updateTrashCount();
+            updateFilterUI();
+        }
+
+        function refreshColumns(statuses) {
+            statuses.forEach(s => {
+                const filteredTasks = getFilteredTasks();
+                const columnTasks = filteredTasks.filter(t => t.status === s);
+                const container = s === STATUS.TODO ? todoContainer : (s === STATUS.IN_PROGRESS ? progressContainer : doneContainer);
+                const counter = s === STATUS.TODO ? todoCountSpan : (s === STATUS.IN_PROGRESS ? progressCountSpan : doneCountSpan);
+                if (counter) counter.innerText = columnTasks.length;
+                if (container) renderColumn(container, columnTasks, s);
+            });
+            updateTrashCount();
+            updateFilterUI();
+        }
+        
+        function renderColumn(container, tasksArray, columnStatus) {
+            if (!container) return;
+            if (tasksArray.length === 0) {
+                container.innerHTML = `<div class="text-center py-10 text-gray-400 text-sm">${t('noTasks')}</div>`;
+                return;
+            }
+            
+                        const cardsHtml = tasksArray.map(task => {
+                const priorityClass = task.priority === PRIORITY.HIGH ? 'priority-high' : (task.priority === PRIORITY.MEDIUM ? 'priority-medium' : 'priority-low');
+                const priorityBadge = getPriorityBadgeClass(task.priority);
+                const priorityText = getPriorityText(task.priority);
+                const deadlineInfo = task.deadline ? getDeadlineInfo(task.deadline) : { cls: '', suffix: '' };
+                const deadlineDisplay = task.deadline ? formatDeadline(task.deadline) : '';
+                
+                return `
+                    <div class="kanban-card bg-white rounded-xl p-3 mb-3 shadow-sm border border-gray-200 hover:shadow-md transition-all ${priorityClass}" data-id="${task.id}">
+                        <div class="flex justify-between items-start gap-2">
+                            <div class="flex-1 cursor-pointer edit-trigger" data-id="${task.id}">
+                                <p class="text-gray-800 font-medium break-words">${escapeHtml(task.title)}</p>
+                                ${task.description ? `<p class="text-gray-500 text-xs mt-1 break-words">${escapeHtml(task.description.substring(0, 80))}${task.description.length > 80 ? '...' : ''}</p>` : ''}
+                                <div class="flex gap-2 mt-2 flex-wrap">
+                                    <span class="status-badge ${getStatusBadgeClass(columnStatus)}">${getStatusIcon(columnStatus)} ${getStatusText(columnStatus)}</span>
+                                    <span class="text-xs px-2 py-0.5 rounded ${priorityBadge}">${priorityText}</span>
+                                    ${task.deadline ? `<span class="text-xs px-2 py-0.5 rounded ${deadlineInfo.cls}">📅 ${deadlineDisplay}${deadlineInfo.suffix}</span>` : ''}
+                                </div>
+                                ${task.tags && task.tags.length ? `
+                                    <div class="flex gap-1 mt-2 flex-wrap">
+                                        ${task.tags.map(tag => `<span class="tag ${getTagColorClass(tag)}">${escapeHtml(tag)}</span>`).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <button class="delete-card-btn text-gray-400 hover:text-red-500 transition-colors flex-shrink-0 p-1" data-id="${task.id}">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = cardsHtml;
+            
+            container.querySelectorAll('.delete-card-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    softDeleteTask(btn.dataset.id);
+                });
+            });
+            
+            container.querySelectorAll('.edit-trigger').forEach(trigger => {
+                trigger.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openEditModal(trigger.dataset.id);
+                });
+            });
+            reinitSortableForContainer(container);
+        }
+        
+        function renderTrashList() {
+            if (!trashList) return;
+            const deletedTasks = tasks.filter(t => t.isDeleted === true);
+            if (deletedTasks.length === 0) {
+                trashList.innerHTML = `<div class="text-center py-10 text-gray-400 text-sm">${t('trashEmpty')}</div>`;
+                return;
+            }
+            trashList.innerHTML = deletedTasks.map(task => `
+                <div class="bg-gray-50 rounded-xl p-3 flex justify-between items-center border border-gray-200">
+                    <div class="flex-1">
+                        <p class="font-medium text-gray-800">${escapeHtml(task.title)}</p>
+                        ${task.description ? `<p class="text-sm text-gray-500 mt-1">${escapeHtml(task.description)}</p>` : ''}
+                        <div class="flex gap-2 mt-2 flex-wrap">
+                            <span class="text-xs px-2 py-0.5 rounded ${getPriorityBadgeClass(task.priority)}">${getPriorityText(task.priority)}</span>
+                            ${task.tags && task.tags.length ? task.tags.map(tag => `<span class="tag ${getTagColorClass(tag)}">${escapeHtml(tag)}</span>`).join('') : ''}
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="restore-task-btn text-green-600 hover:text-green-700 p-1" data-id="${task.id}">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9m-3 3h6m-3-3v6"/></svg>
+                        </button>
+                        <button class="permanent-delete-btn text-red-600 hover:text-red-700 p-1" data-id="${task.id}">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+            trashList.querySelectorAll('.restore-task-btn').forEach(btn => {
+                btn.addEventListener('click', () => restoreTask(btn.dataset.id));
+            });
+            trashList.querySelectorAll('.permanent-delete-btn').forEach(btn => {
+                btn.addEventListener('click', () => permanentDeleteTask(btn.dataset.id));
+            });
+        }
+        
+        // ---------- Модальные окна ----------
+                function openAddModal() {
+                    currentModalTags = [];
+                    const removeHandler = createTagRemoveHandler(modalTagsContainer, currentModalTags);
+                    renderTagContainerContent(modalTagsContainer, currentModalTags, removeHandler);
+            addModal.classList.remove('hidden');
+            modalTaskTitle.value = '';
+            modalTaskDesc.value = '';
+            modalTaskPriority.value = PRIORITY.MEDIUM;
+            modalTaskDeadline.value = '';
+            modalTaskTitle.focus();
+        }
+        
+                function openEditModal(taskId) {
+                    const task = tasks.find(t => t.id === taskId);
+                    if (!task || task.isDeleted) return;
+                    editingTaskId = taskId;
+                    currentEditTags = [...(task.tags || [])];
+                    editTaskTitle.value = task.title;
+                    editTaskDesc.value = task.description || '';
+                    editTaskPriority.value = task.priority || PRIORITY.MEDIUM;
+                    editTaskDeadline.value = task.deadline ? formatDateForInput(task.deadline) : '';
+                    const removeHandler = createTagRemoveHandler(editTagsContainer, currentEditTags);
+                    renderTagContainerContent(editTagsContainer, currentEditTags, removeHandler);
+            editModal.classList.remove('hidden');
+        }
+        
+        function openTagsManagerModal() {
+            renderTagsList();
+            tagsManagerModal.classList.remove('hidden');
+        }
+        
+        function handleAddFromModal() {
+            const title = modalTaskTitle.value.trim();
+            const description = modalTaskDesc.value.trim();
+            const priority = modalTaskPriority.value;
+            const deadline = modalTaskDeadline.value || null;
+            if (title) {
+                addTask(title, description, priority, deadline, currentModalTags);
+                closeAddModal();
+            } else {
+                modalTaskTitle.classList.add('border-red-300');
+                setTimeout(() => modalTaskTitle.classList.remove('border-red-300'), 500);
+            }
+        }
+        
+        function handleEditConfirm() {
+            const title = editTaskTitle.value.trim();
+            const description = editTaskDesc.value.trim();
+            const priority = editTaskPriority.value;
+            const deadline = editTaskDeadline.value || null;
+            if (title && editingTaskId) {
+                updateTask(editingTaskId, title, description, priority, deadline, currentEditTags);
+                closeEditModal();
+            } else if (!title) {
+                editTaskTitle.classList.add('border-red-300');
+                setTimeout(() => editTaskTitle.classList.remove('border-red-300'), 500);
+            }
+        }
+        
+        function closeAddModal() { addModal.classList.add('hidden'); }
+        function closeEditModal() { editModal.classList.add('hidden'); editingTaskId = null; }
+        function closeTagsManagerModal() { tagsManagerModal.classList.add('hidden'); }
+        function openTrashModal() { renderTrashList(); trashModal.classList.remove('hidden'); }
+        function closeTrashModal() { trashModal.classList.add('hidden'); }
+        
+        // ---------- Вспомогательные ----------
+                function formatDateForInput(date) {
+            if (!date) return '';
+            const d = new Date(date);
+            // Корректируем сдвиг часового пояса для datetime-local
+            const offset = d.getTimezoneOffset();
+            const localDate = new Date(d.getTime() - offset * 60000);
+            return localDate.toISOString().slice(0, 16);
+        }
+        
+        function formatDeadline(deadline) {
+            if (!deadline) return '';
+            const date = new Date(deadline);
+            return date.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        }
+        
+                function getDeadlineInfo(deadline) {
+            if (!deadline) return { cls: '', suffix: '' };
+            const now = new Date();
+            const deadlineDate = new Date(deadline);
+            const diffHours = (deadlineDate - now) / (1000 * 60 * 60);
+            if (deadlineDate < now) return { cls: 'deadline-expired', suffix: ' ❌' };
+            if (diffHours < 24) return { cls: 'deadline-urgent', suffix: ' ⚠️' };
+            return { cls: '', suffix: '' };
+        }
+        
+        function getStatusBadgeClass(status) {
+            switch(status) {
+                case STATUS.TODO: return 'bg-blue-100 text-blue-700';
+                case STATUS.IN_PROGRESS: return 'bg-amber-100 text-amber-700';
+                case STATUS.DONE: return 'bg-emerald-100 text-emerald-700';
+                default: return 'bg-gray-100 text-gray-700';
+            }
+        }
+        
+                function getStatusText(status) {
+            switch(status) {
+                case STATUS.TODO: return t('statusTodo');
+                case STATUS.IN_PROGRESS: return t('statusProgress');
+                case STATUS.DONE: return t('statusDone');
+                default: return status;
+            }
+        }
+        
+        function getStatusIcon(status) {
+            switch(status) {
+                case STATUS.TODO: return '📋';
+                case STATUS.IN_PROGRESS: return '⚙️';
+                case STATUS.DONE: return '✅';
+                default: return '';
+            }
+        }
+        
+        function getPriorityBadgeClass(priority) {
+            switch(priority) {
+                case PRIORITY.HIGH: return 'bg-red-100 text-red-700';
+                case PRIORITY.MEDIUM: return 'bg-amber-100 text-amber-700';
+                case PRIORITY.LOW: return 'bg-green-100 text-green-700';
+                default: return 'bg-gray-100 text-gray-700';
+            }
+        }
+        
+                function getPriorityText(priority) {
+            switch(priority) {
+                case PRIORITY.HIGH: return t('priorityHigh');
+                case PRIORITY.MEDIUM: return t('priorityMedium');
+                case PRIORITY.LOW: return t('priorityLow');
+                default: return priority;
+            }
+        }
+        
+                function escapeHtml(str) {
+            if (!str) return '';
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return str.replace(/[&<>"']/g, m => map[m]);
+        }
+        
+        // ---------- Drag & Drop ----------
+        let sortableInstances = [];
+        
+        function initSortable() {
+            sortableInstances.forEach(instance => instance.destroy());
+            sortableInstances = [];
+            reinitSortableForContainer(todoContainer);
+            reinitSortableForContainer(progressContainer);
+            reinitSortableForContainer(doneContainer);
+        }
+
+        function reinitSortableForContainer(container) {
+            if (!container || !container.children.length) return;
+            const idx = sortableInstances.findIndex(inst => inst.el === container);
+            if (idx !== -1) {
+                sortableInstances[idx].destroy();
+                sortableInstances.splice(idx, 1);
+            }
+            const groupConfig = { name: 'kanban', pull: true, revertClone: false, put: true };
+            const instance = new Sortable(container, { group: groupConfig, animation: 200, onEnd: onDragEnd, handle: '.kanban-card', ghostClass: 'dragging' });
+            sortableInstances.push(instance);
+        }
+        
+                // ---------- Обработчики добавления тегов в модалках ----------
+                function setupModalTagHandlers() {
+                    if (modalAddTagBtn) {
+                        modalAddTagBtn.addEventListener('click', () => {
+                            const selectedTag = modalTagSelect.value;
+                            if (selectedTag && !currentModalTags.includes(selectedTag)) {
+                                currentModalTags.push(selectedTag);
+                                const removeHandler = createTagRemoveHandler(modalTagsContainer, currentModalTags);
+                                renderTagContainerContent(modalTagsContainer, currentModalTags, removeHandler);
+                                modalTagSelect.value = '';
+                            }
+                        });
+                    }
+            
+                    if (editAddTagBtn) {
+                        editAddTagBtn.addEventListener('click', () => {
+                            const selectedTag = editTagSelect.value;
+                            if (selectedTag && !currentEditTags.includes(selectedTag)) {
+                                currentEditTags.push(selectedTag);
+                                const removeHandler = createTagRemoveHandler(editTagsContainer, currentEditTags);
+                                renderTagContainerContent(editTagsContainer, currentEditTags, removeHandler);
+                                editTagSelect.value = '';
+                            }
+                        });
+                    }
+                }
+        
+        // ---------- Инициализация ----------
+        openAddModalBtn.addEventListener('click', openAddModal);
+        openTrashBtn.addEventListener('click', openTrashModal);
+        openTagsManagerBtn.addEventListener('click', openTagsManagerModal);
+        modalConfirmBtn.addEventListener('click', handleAddFromModal);
+        modalCancelBtn.addEventListener('click', closeAddModal);
+        editConfirmBtn.addEventListener('click', handleEditConfirm);
+        editCancelBtn.addEventListener('click', closeEditModal);
+        clearTrashBtn.addEventListener('click', () => { if(confirm(t('confirmClearTrash'))) clearTrash(); });
+        closeTrashBtn.addEventListener('click', closeTrashModal);
+        
+        const closeTagsManagerBtn = document.getElementById('closeTagsManagerBtn');
+        const closeTagsManagerBtn2 = document.getElementById('closeTagsManagerBtn2');
+        if (closeTagsManagerBtn) closeTagsManagerBtn.addEventListener('click', closeTagsManagerModal);
+        if (closeTagsManagerBtn2) closeTagsManagerBtn2.addEventListener('click', closeTagsManagerModal);
+        
+        addTagBtn.addEventListener('click', () => {
+            addNewTag(newTagName.value, newTagColor.value);
+            newTagName.value = '';
+        });
+        
+        addModal.addEventListener('click', (e) => { if (e.target === addModal) closeAddModal(); });
+        editModal.addEventListener('click', (e) => { if (e.target === editModal) closeEditModal(); });
+        trashModal.addEventListener('click', (e) => { if (e.target === trashModal) closeTrashModal(); });
+        tagsManagerModal.addEventListener('click', (e) => { if (e.target === tagsManagerModal) closeTagsManagerModal(); });
+        
+        modalTaskTitle.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleAddFromModal(); });
+        editTaskTitle.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleEditConfirm(); });
+        newTagName.addEventListener('keypress', (e) => { if (e.key === 'Enter') { addNewTag(newTagName.value, newTagColor.value); newTagName.value = ''; } });
+        
+                document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+        document.getElementById('langEn').addEventListener('click', () => setLanguage('en'));
+        document.getElementById('langRu').addEventListener('click', () => setLanguage('ru'));
+        document.getElementById('langEs').addEventListener('click', () => setLanguage('es'));
+        
+        // ---------- Export / Import event handlers ----------
+        document.getElementById('exportBtn').addEventListener('click', exportData);
+        document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFileInput').click());
+        document.getElementById('importFileInput').addEventListener('change', (e) => {
+            if (e.target.files[0]) importData(e.target.files[0]);
+            e.target.value = '';
+        });
+        
+        // ---------- Init filters ----------
+        const searchInput = document.getElementById('searchInput');
+        const filterPriority = document.getElementById('filterPriority');
+        const filterTag = document.getElementById('filterTag');
+        const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                filters.search = searchInput.value;
+                debouncedApplyFilters();
+            });
+        }
+        if (filterPriority) {
+            filterPriority.addEventListener('change', () => {
+                filters.priority = filterPriority.value;
+                applyFilters();
+            });
+        }
+        if (filterTag) {
+            filterTag.addEventListener('change', () => {
+                filters.tag = filterTag.value;
+                applyFilters();
+            });
+        }
+        document.querySelectorAll('.deadline-filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const value = btn.getAttribute('data-deadline');
+                filters.deadline = value;
+                document.querySelectorAll('.deadline-filter-btn').forEach(b => {
+                    b.classList.remove('bg-indigo-600', 'text-white');
+                    b.classList.add('bg-gray-100', 'text-gray-600');
+                });
+                btn.classList.remove('bg-gray-100', 'text-gray-600');
+                btn.classList.add('bg-indigo-600', 'text-white');
+                applyFilters();
+            });
+        });
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', () => {
+                filters = { search: '', priority: 'all', tag: 'all', deadline: 'all' };
+                if (searchInput) searchInput.value = '';
+                if (filterPriority) filterPriority.value = 'all';
+                if (filterTag) filterTag.value = 'all';
+                document.querySelectorAll('.deadline-filter-btn').forEach(b => {
+                    b.classList.remove('bg-indigo-600', 'text-white');
+                    b.classList.add('bg-gray-100', 'text-gray-600');
+                });
+                const allBtn = document.querySelector('.deadline-filter-btn[data-deadline="all"]');
+                if (allBtn) {
+                    allBtn.classList.remove('bg-gray-100', 'text-gray-600');
+                    allBtn.classList.add('bg-indigo-600', 'text-white');
+                }
+                applyFilters();
+            });
+        }
+
+        // ---------- Keyboard shortcuts ----------
+        document.addEventListener('keydown', (e) => {
+            // Don't trigger when typing in inputs/textareas/selects (except Escape)
+            const tag = e.target.tagName.toLowerCase();
+            const isInput = (tag === 'input' || tag === 'textarea' || tag === 'select');
+            
+            if (e.key === 'Escape') {
+                // Close any open modal
+                if (!addModal.classList.contains('hidden')) { closeAddModal(); return; }
+                if (!editModal.classList.contains('hidden')) { closeEditModal(); return; }
+                if (!trashModal.classList.contains('hidden')) { closeTrashModal(); return; }
+                if (!tagsManagerModal.classList.contains('hidden')) { closeTagsManagerModal(); return; }
+                // Blur focused element
+                if (document.activeElement) document.activeElement.blur();
+                return;
+            }
+            
+            if (isInput) return; // Don't intercept typing
+            
+            if (e.key === 'n' || e.key === 'N') {
+                e.preventDefault();
+                openAddModal();
+            } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                undoLastDelete();
+            } else if (e.key === '?') {
+                e.preventDefault();
+                toggleShortcutsHelp();
+            } else if (e.key === 'f' || e.key === 'F') {
+                e.preventDefault();
+                const searchInput = document.getElementById('searchInput');
+                if (searchInput) searchInput.focus();
+            }
+        });
+
+        // Close shortcuts help panel when clicking overlay background
+        const shortcutsPanel = document.getElementById('shortcutsHelp');
+        if (shortcutsPanel) {
+            shortcutsPanel.addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+            });
+        }
+
+        initTheme();
+        initTagsLibrary();
+        loadTasks();
+        setLanguage(currentLang);
+        setupModalTagHandlers();
+    </script>
+
+</body>
+</html>
